@@ -1,5 +1,5 @@
 --[[
-    R6 + NOCLIP + HITBOX EXPANDER v9 – Ultimate Domination
+    R6 BLOCKY AVATARS + NOCLIP + HITBOX EXPANDER v10 – FINAL
     - Forces ALL players to R6 (Classic Blocky) on your screen
     - You can noclip through other players (walk through them)
     - Their hitbox stays MASSIVE (1-10x) – bombs/melee register
@@ -21,30 +21,57 @@ local SelectedScale = 5
 local OriginalSizes = {} -- stores original sizes per player
 local NoclipConn = nil
 
--- ─── FORCE R6 ON A CHARACTER ───
+-- ─── FORCE R6 ON A CHARACTER (CLASSIC BLOCKY) ───
 local function forceR6(char)
     if not char then return end
     local humanoid = char:FindFirstChild("Humanoid")
     if not humanoid then return end
     
-    -- Only change if it's not already R6
+    -- Force R6 rig type
     if humanoid.RigType ~= Enum.HumanoidRigType.R6 then
         humanoid.RigType = Enum.HumanoidRigType.R6
-        -- Wait for R6 parts to load
         task.wait(0.1)
     end
     
-    -- Ensure all R6 parts exist (Head, Torso, LeftArm, RightArm, LeftLeg, RightLeg)
-    local requiredParts = {"Head", "Torso", "LeftArm", "RightArm", "LeftLeg", "RightLeg"}
-    for _, name in ipairs(requiredParts) do
-        if not char:FindFirstChild(name) then
-            -- Create missing part (basic R6 part)
-            local part = Instance.new("Part")
+    -- Ensure all R6 parts exist and are blocky
+    local r6Parts = {
+        Head = Vector3.new(2, 2, 1),
+        Torso = Vector3.new(2, 2.2, 1),
+        LeftArm = Vector3.new(1, 2, 1),
+        RightArm = Vector3.new(1, 2, 1),
+        LeftLeg = Vector3.new(1, 2, 1),
+        RightLeg = Vector3.new(1, 2, 1)
+    }
+    
+    for name, size in pairs(r6Parts) do
+        local part = char:FindFirstChild(name)
+        if not part then
+            part = Instance.new("Part")
             part.Name = name
-            part.Size = Vector3.new(2, 2, 1) -- Default R6 sizes
+            part.Size = size
             part.Anchored = false
             part.CanCollide = true
             part.Parent = char
+        else
+            -- Force blocky size
+            part.Size = size
+        end
+    end
+    
+    -- Remove any accessories or extra parts that ruin the blocky look
+    for _, child in ipairs(char:GetChildren()) do
+        if child:IsA("Accessory") or child:IsA("Hat") or child:IsA("Clothing") then
+            child:Destroy()
+        end
+    end
+    
+    -- Remove any attachments or weird meshes
+    for _, descendant in ipairs(char:GetDescendants()) do
+        if descendant:IsA("Attachment") or descendant:IsA("Motor6D") then
+            -- Keep Motor6D for animation, but remove attachments
+            if descendant:IsA("Attachment") then
+                descendant:Destroy()
+            end
         end
     end
 end
@@ -133,7 +160,6 @@ local function enableNoclip()
             if player ~= Player and player.Character then
                 for _, part in ipairs(getAllParts(player.Character)) do
                     -- Set CanCollide to false ONLY for you (client-side)
-                    -- This makes you walk through them, but they still collide with walls
                     part.CanCollide = false
                 end
             end
@@ -211,7 +237,7 @@ local function createGUI()
 
     local stroke = Instance.new("UIStroke")
     stroke.Thickness = 1.5
-    stroke.Color = Color3.fromRGB(255, 200, 0)
+    stroke.Color = Color3.fromRGB(0, 255, 255)
     stroke.Transparency = 0.6
     stroke.Parent = mainFrame
 
@@ -224,8 +250,8 @@ local function createGUI()
     local titleText = Instance.new("TextLabel")
     titleText.Size = UDim2.new(0.7, 0, 1, 0)
     titleText.BackgroundTransparency = 1
-    titleText.Text = "⚡ R6"
-    titleText.TextColor3 = Color3.fromRGB(255, 200, 0)
+    titleText.Text = "🧊 R6"
+    titleText.TextColor3 = Color3.fromRGB(0, 255, 255)
     titleText.TextScaled = true
     titleText.Font = Enum.Font.Bangers
     titleText.TextXAlignment = Enum.TextXAlignment.Left
@@ -322,7 +348,7 @@ local function createGUI()
     currentScaleText.Position = UDim2.new(0.075, 0, 0.60, 0)
     currentScaleText.BackgroundTransparency = 1
     currentScaleText.Text = "5x"
-    currentScaleText.TextColor3 = Color3.fromRGB(255, 200, 0)
+    currentScaleText.TextColor3 = Color3.fromRGB(0, 255, 255)
     currentScaleText.TextScaled = true
     currentScaleText.Font = Enum.Font.Bangers
     currentScaleText.Parent = contentPanel
@@ -414,7 +440,7 @@ end
 local gui = createGUI()
 gui.Parent = Player.PlayerGui
 
-print("⚡ R6 + NOCLIP + HITBOX EXPANDER LOADED!")
+print("🧊 R6 BLOCKY AVATARS + NOCLIP + HITBOX EXPANDER LOADED!")
 print("🎯 Everyone is R6 (Classic Blocky) on your screen.")
 print("🚶 You can walk through other players (Noclip).")
 print("💀 Their hitbox is MASSIVE (1-10x) – bombs/melee register.")
