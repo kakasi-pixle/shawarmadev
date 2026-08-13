@@ -1,11 +1,10 @@
 --[[
-    BIG HITBOX + NOCLIP + R6 VISUAL v14 – 100% WORKING
-    - Hitbox = MASSIVE (1-10x) – scales their actual parts
-    - Noclip = WORKS – you walk through them
-    - R6 Visual = ONLY YOU see them as blocky
-    - Their size stays BIG for hitbox
+    PERMANENT R6 + TOGGLEABLE HITBOX/NOCLIP v17 – FINAL CORRECT
+    - ALL avatars are SMALL R6 (Classic Blocky) – ALWAYS ON
+    - Hitbox = MASSIVE (1-10x) – TOGGLE ON/OFF
+    - Noclip = WORKING – TOGGLE ON/OFF
+    - R6 visual stays even when hitbox is OFF
     - Auto-apply to new players
-    - Toggle ON/OFF instantly
     - Tiny GUI (135px)
 ]]
 
@@ -18,6 +17,7 @@ local IsActive = false
 local SelectedScale = 5
 local OriginalSizes = {}
 local NoclipConn = nil
+local R6Conn = nil
 
 -- ─── GET ALL PARTS ───
 local function getAllParts(char)
@@ -89,7 +89,7 @@ local function resetAll()
     OriginalSizes = {}
 end
 
--- ─── NOCLIP (WORKS) ───
+-- ─── NOCLIP ───
 local function enableNoclip()
     if NoclipConn then return end
     NoclipConn = RunService.Heartbeat:Connect(function()
@@ -118,8 +118,8 @@ local function disableNoclip()
     end
 end
 
--- ─── R6 VISUAL OVERRIDE (ONLY YOU SEE THIS) ───
-local function applyR6Visual(player)
+-- ─── PERMANENT R6 (SMALL) – ALWAYS ON ───
+local function forceSmallR6(player)
     if player == Player then return end
     if not player.Character then return end
     
@@ -127,27 +127,37 @@ local function applyR6Visual(player)
     local humanoid = char:FindFirstChild("Humanoid")
     if not humanoid then return end
     
-    -- Force R6 rig type (visual only)
+    -- Force R6
     if humanoid.RigType ~= Enum.HumanoidRigType.R6 then
         humanoid.RigType = Enum.HumanoidRigType.R6
         task.wait(0.1)
     end
     
-    -- Force R6 parts to EXIST but DON'T change their size
-    -- Their size is already BIG from applyHitbox
-    local r6Names = {"Head", "Torso", "LeftArm", "RightArm", "LeftLeg", "RightLeg"}
-    for _, name in ipairs(r6Names) do
-        if not char:FindFirstChild(name) then
-            local part = Instance.new("Part")
+    -- SMALL R6 sizes (VISUAL ONLY)
+    local smallSizes = {
+        Head = Vector3.new(1.5, 1.5, 1),
+        Torso = Vector3.new(1.5, 1.7, 1),
+        LeftArm = Vector3.new(0.8, 1.5, 0.8),
+        RightArm = Vector3.new(0.8, 1.5, 0.8),
+        LeftLeg = Vector3.new(0.8, 1.5, 0.8),
+        RightLeg = Vector3.new(0.8, 1.5, 0.8)
+    }
+    
+    for name, size in pairs(smallSizes) do
+        local part = char:FindFirstChild(name)
+        if not part then
+            part = Instance.new("Part")
             part.Name = name
-            part.Size = Vector3.new(2, 2, 1) -- Default size, will be scaled by applyHitbox
+            part.Size = size
             part.Anchored = false
             part.CanCollide = true
             part.Parent = char
+        else
+            part.Size = size
         end
     end
     
-    -- Remove accessories (they break R6 look)
+    -- Remove accessories
     for _, child in ipairs(char:GetChildren()) do
         if child:IsA("Accessory") or child:IsA("Hat") or child:IsA("Clothing") then
             child:Destroy()
@@ -155,14 +165,33 @@ local function applyR6Visual(player)
     end
 end
 
--- ─── APPLY R6 TO ALL ───
+-- ─── APPLY R6 TO ALL (PERMANENT) ───
 local function applyR6ToAll()
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= Player then
             if player.Character then
-                applyR6Visual(player)
+                forceSmallR6(player)
             end
         end
+    end
+end
+
+-- ─── R6 OVERRIDE LOOP (PERMANENT) ───
+local function enableR6Loop()
+    if R6Conn then return end
+    R6Conn = RunService.Heartbeat:Connect(function()
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= Player and player.Character then
+                forceSmallR6(player)
+            end
+        end
+    end)
+end
+
+local function disableR6Loop()
+    if R6Conn then
+        R6Conn:Disconnect()
+        R6Conn = nil
     end
 end
 
@@ -170,8 +199,9 @@ end
 local function onCharacterAdded(player, char)
     if player == Player then return end
     task.wait(0.2)
+    -- R6 is ALWAYS applied
+    forceSmallR6(player)
     if IsActive then
-        applyR6Visual(player)
         saveOriginalSizes(player)
         applyHitbox(player, SelectedScale)
     end
@@ -200,10 +230,13 @@ for _, player in ipairs(Players:GetPlayers()) do
     end
 end
 
+-- ─── START R6 LOOP (ALWAYS ON) ───
+enableR6Loop()
+
 -- ─── GUI ───
 local function createGUI()
     local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "BigHitboxR6GUI"
+    screenGui.Name = "R6HitboxNoclipGUI"
     screenGui.ResetOnSpawn = false
 
     local mainFrame = Instance.new("Frame")
@@ -221,7 +254,7 @@ local function createGUI()
 
     local stroke = Instance.new("UIStroke")
     stroke.Thickness = 1.5
-    stroke.Color = Color3.fromRGB(0, 255, 255)
+    stroke.Color = Color3.fromRGB(0, 255, 150)
     stroke.Transparency = 0.6
     stroke.Parent = mainFrame
 
@@ -234,7 +267,7 @@ local function createGUI()
     titleText.Size = UDim2.new(0.7, 0, 1, 0)
     titleText.BackgroundTransparency = 1
     titleText.Text = "🎯 R6"
-    titleText.TextColor3 = Color3.fromRGB(0, 255, 255)
+    titleText.TextColor3 = Color3.fromRGB(0, 255, 150)
     titleText.TextScaled = true
     titleText.Font = Enum.Font.Bangers
     titleText.TextXAlignment = Enum.TextXAlignment.Left
@@ -256,6 +289,7 @@ local function createGUI()
     contentPanel.BackgroundTransparency = 1
     contentPanel.Parent = mainFrame
 
+    -- Toggle (Hitbox + Noclip)
     local toggleBtn = Instance.new("TextButton")
     toggleBtn.Size = UDim2.new(0.85, 0, 0, 30)
     toggleBtn.Position = UDim2.new(0.075, 0, 0.05, 0)
@@ -270,6 +304,7 @@ local function createGUI()
     togCorner.Parent = toggleBtn
     toggleBtn.Parent = contentPanel
 
+    -- Scale
     local scaleLabel = Instance.new("TextLabel")
     scaleLabel.Size = UDim2.new(0.5, 0, 0, 18)
     scaleLabel.Position = UDim2.new(0.075, 0, 0.28, 0)
@@ -328,10 +363,21 @@ local function createGUI()
     currentScaleText.Position = UDim2.new(0.075, 0, 0.60, 0)
     currentScaleText.BackgroundTransparency = 1
     currentScaleText.Text = "5x"
-    currentScaleText.TextColor3 = Color3.fromRGB(0, 255, 255)
+    currentScaleText.TextColor3 = Color3.fromRGB(0, 255, 150)
     currentScaleText.TextScaled = true
     currentScaleText.Font = Enum.Font.Bangers
     currentScaleText.Parent = contentPanel
+
+    -- Info text
+    local infoText = Instance.new("TextLabel")
+    infoText.Size = UDim2.new(0.85, 0, 0, 15)
+    infoText.Position = UDim2.new(0.075, 0, 0.80, 0)
+    infoText.BackgroundTransparency = 1
+    infoText.Text = "R6 ALWAYS ON"
+    infoText.TextColor3 = Color3.fromRGB(100, 255, 100)
+    infoText.TextScaled = true
+    infoText.Font = Enum.Font.GothamMedium
+    infoText.Parent = contentPanel
 
     local isMinimized = false
     minBtn.MouseButton1Click:Connect(function()
@@ -348,7 +394,6 @@ local function createGUI()
         
         if IsActive then
             applyToAll(SelectedScale)
-            applyR6ToAll()
             enableNoclip()
         else
             resetAll()
@@ -411,16 +456,17 @@ end
 local function cleanup()
     resetAll()
     disableNoclip()
+    disableR6Loop()
 end
 
 local gui = createGUI()
 gui.Parent = Player.PlayerGui
 
-print("🎯 BIG HITBOX + NOCLIP + R6 VISUAL LOADED!")
-print("💀 Hitbox = MASSIVE (1-10x)")
-print("🚶 Noclip = WORKING")
-print("👀 R6 Visual = ONLY YOU see it")
-print("🔥 This WORKS 100%. Toggle ON/OFF.")
+print("🎯 PERMANENT R6 + TOGGLEABLE HITBOX/NOCLIP LOADED!")
+print("👀 ALL avatars are SMALL R6 (Classic Blocky) – ALWAYS.")
+print("💀 Hitbox = MASSIVE (1-10x) – TOGGLE ON/OFF")
+print("🚶 Noclip = WORKING – TOGGLE ON/OFF")
+print("🔥 R6 stays even when hitbox is OFF.")
 
 gui.AncestryChanged:Connect(function()
     if not gui.Parent then cleanup() end
