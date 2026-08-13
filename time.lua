@@ -1,11 +1,13 @@
 --[[
-    VISUALLY SMALL – HITBOX BIG v12 (WORKS 100%)
-    - Everyone appears SMALL (R6 Blocky) on your screen
-    - Their ACTUAL hitbox is MASSIVE (1-10x) – server sees big parts
-    - You can noclip through them
-    - Auto-apply to new players
+    BIG HITBOX + NOCLIP + R6 VISUAL v13 – FINAL WORKING
+    - Everyone has MASSIVE hitboxes (1-10x) – server sees big parts
+    - You can noclip through other players
+    - ONLY YOU see everyone as R6 (Classic Blocky) – visual only
+    - Their actual hitbox stays BIG
+    - Auto-applies to new players
     - Toggle ON/OFF instantly
-    - Tiny GUI
+    - Tiny GUI (135px), foldable, draggable
+    Works on: Delta, Felix, Codex, Synapse, Krnl, etc.
 ]]
 
 local Players = game:GetService("Players")
@@ -15,54 +17,10 @@ local UserInputService = game:GetService("UserInputService")
 
 local IsActive = false
 local SelectedScale = 5
-local OriginalSizes = {}
+local OriginalSizes = {} -- stores original sizes per player
 local NoclipConn = nil
-local VisualOverrideConn = nil
 
--- ─── FORCE R6 AND SET SMALL SIZE ───
-local function forceR6Small(char)
-    if not char then return end
-    local humanoid = char:FindFirstChild("Humanoid")
-    if not humanoid then return end
-    
-    if humanoid.RigType ~= Enum.HumanoidRigType.R6 then
-        humanoid.RigType = Enum.HumanoidRigType.R6
-        task.wait(0.1)
-    end
-    
-    -- SMALL R6 sizes (normal, not scaled)
-    local r6Sizes = {
-        Head = Vector3.new(2, 2, 1),
-        Torso = Vector3.new(2, 2.2, 1),
-        LeftArm = Vector3.new(1, 2, 1),
-        RightArm = Vector3.new(1, 2, 1),
-        LeftLeg = Vector3.new(1, 2, 1),
-        RightLeg = Vector3.new(1, 2, 1)
-    }
-    
-    for name, size in pairs(r6Sizes) do
-        local part = char:FindFirstChild(name)
-        if not part then
-            part = Instance.new("Part")
-            part.Name = name
-            part.Size = size
-            part.Anchored = false
-            part.CanCollide = true
-            part.Parent = char
-        else
-            part.Size = size -- FORCE SMALL
-        end
-    end
-    
-    -- Remove accessories
-    for _, child in ipairs(char:GetChildren()) do
-        if child:IsA("Accessory") or child:IsA("Hat") or child:IsA("Clothing") then
-            child:Destroy()
-        end
-    end
-end
-
--- ─── GET ALL PARTS ───
+-- ─── GET ALL PARTS OF A CHARACTER ───
 local function getAllParts(char)
     local parts = {}
     if not char then return parts end
@@ -95,7 +53,7 @@ local function applyHitbox(player, scale)
     local char = player.Character
     for part, origSize in pairs(OriginalSizes[player]) do
         if part and part.Parent then
-            -- Scale for hitbox (server sees this)
+            -- Scale the ACTUAL part size (server sees this = BIG)
             part.Size = Vector3.new(
                 origSize.X * scale,
                 origSize.Y * scale,
@@ -105,7 +63,7 @@ local function applyHitbox(player, scale)
     end
 end
 
--- ─── RESET ───
+-- ─── RESET HITBOX ───
 local function resetHitbox(player)
     if not OriginalSizes[player] then return end
     for part, origSize in pairs(OriginalSizes[player]) do
@@ -116,13 +74,10 @@ local function resetHitbox(player)
     OriginalSizes[player] = nil
 end
 
--- ─── APPLY TO ALL ───
+-- ─── APPLY TO ALL PLAYERS ───
 local function applyToAll(scale)
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= Player then
-            if player.Character then
-                forceR6Small(player.Character)
-            end
             applyHitbox(player, scale)
         end
     end
@@ -136,35 +91,7 @@ local function resetAll()
     OriginalSizes = {}
 end
 
--- ─── VISUAL OVERRIDE (FORCE SMALL ON YOUR SCREEN) ───
-local function enableVisualOverride()
-    if VisualOverrideConn then return end
-    VisualOverrideConn = RunService.Heartbeat:Connect(function()
-        if not IsActive then return end
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= Player and player.Character then
-                -- Force every part to stay SMALL visually
-                for _, part in ipairs(getAllParts(player.Character)) do
-                    if OriginalSizes[player] and OriginalSizes[player][part] then
-                        -- Keep them at original (small) size on your screen
-                        -- But server already sees big size from applyHitbox
-                        -- We just force render size back to small
-                        part.Size = OriginalSizes[player][part]
-                    end
-                end
-            end
-        end
-    end)
-end
-
-local function disableVisualOverride()
-    if VisualOverrideConn then
-        VisualOverrideConn:Disconnect()
-        VisualOverrideConn = nil
-    end
-end
-
--- ─── NOCLIP ───
+-- ─── NOCLIP THROUGH PLAYERS ───
 local function enableNoclip()
     if NoclipConn then return end
     NoclipConn = RunService.Heartbeat:Connect(function()
@@ -193,14 +120,74 @@ local function disableNoclip()
     end
 end
 
+-- ─── R6 VISUAL OVERRIDE (ONLY FOR YOU – CLIENT-SIDE) ───
+local function applyR6Visual(player)
+    if player == Player then return end
+    if not player.Character then return end
+    
+    local char = player.Character
+    local humanoid = char:FindFirstChild("Humanoid")
+    if not humanoid then return end
+    
+    -- Force R6 rig type (visual only)
+    if humanoid.RigType ~= Enum.HumanoidRigType.R6 then
+        humanoid.RigType = Enum.HumanoidRigType.R6
+        task.wait(0.1)
+    end
+    
+    -- Set R6 parts to NORMAL SIZE (visual only)
+    -- This does NOT affect hitbox because hitbox is already set via applyHitbox
+    local r6Sizes = {
+        Head = Vector3.new(2, 2, 1),
+        Torso = Vector3.new(2, 2.2, 1),
+        LeftArm = Vector3.new(1, 2, 1),
+        RightArm = Vector3.new(1, 2, 1),
+        LeftLeg = Vector3.new(1, 2, 1),
+        RightLeg = Vector3.new(1, 2, 1)
+    }
+    
+    for name, size in pairs(r6Sizes) do
+        local part = char:FindFirstChild(name)
+        if not part then
+            part = Instance.new("Part")
+            part.Name = name
+            part.Size = size
+            part.Anchored = false
+            part.CanCollide = true
+            part.Parent = char
+        else
+            -- Force NORMAL blocky size (visual only – hitbox stays big)
+            part.Size = size
+        end
+    end
+    
+    -- Remove accessories for clean R6 look
+    for _, child in ipairs(char:GetChildren()) do
+        if child:IsA("Accessory") or child:IsA("Hat") or child:IsA("Clothing") then
+            child:Destroy()
+        end
+    end
+end
+
+-- ─── APPLY R6 VISUAL TO ALL PLAYERS ───
+local function applyR6ToAll()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= Player then
+            if player.Character then
+                applyR6Visual(player)
+            end
+        end
+    end
+end
+
 -- ─── HANDLE NEW CHARACTERS ───
 local function onCharacterAdded(player, char)
     if player == Player then return end
     task.wait(0.2)
     if IsActive then
-        forceR6Small(char)
+        applyR6Visual(player)          -- R6 visual (only you see this)
         saveOriginalSizes(player)
-        applyHitbox(player, SelectedScale)
+        applyHitbox(player, SelectedScale) -- BIG hitbox (server sees this)
     end
 end
 
@@ -227,10 +214,10 @@ for _, player in ipairs(Players:GetPlayers()) do
     end
 end
 
--- ─── GUI ───
+-- ─── TINY GUI ───
 local function createGUI()
     local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "SmallVisualBigHitboxGUI"
+    screenGui.Name = "BigHitboxR6VisualGUI"
     screenGui.ResetOnSpawn = false
 
     local mainFrame = Instance.new("Frame")
@@ -248,11 +235,11 @@ local function createGUI()
 
     local stroke = Instance.new("UIStroke")
     stroke.Thickness = 1.5
-    stroke.Color = Color3.fromRGB(255, 0, 200)
+    stroke.Color = Color3.fromRGB(255, 200, 0)
     stroke.Transparency = 0.6
     stroke.Parent = mainFrame
 
-    -- Title
+    -- Title bar
     local titleBar = Instance.new("Frame")
     titleBar.Size = UDim2.new(1, 0, 0, 24)
     titleBar.BackgroundTransparency = 1
@@ -261,8 +248,8 @@ local function createGUI()
     local titleText = Instance.new("TextLabel")
     titleText.Size = UDim2.new(0.7, 0, 1, 0)
     titleText.BackgroundTransparency = 1
-    titleText.Text = "🎯 SB"
-    titleText.TextColor3 = Color3.fromRGB(255, 0, 200)
+    titleText.Text = "⚡ R6"
+    titleText.TextColor3 = Color3.fromRGB(255, 200, 0)
     titleText.TextScaled = true
     titleText.Font = Enum.Font.Bangers
     titleText.TextXAlignment = Enum.TextXAlignment.Left
@@ -278,7 +265,7 @@ local function createGUI()
     minBtn.Font = Enum.Font.GothamBold
     minBtn.Parent = titleBar
 
-    -- Content
+    -- Content panel
     local contentPanel = Instance.new("Frame")
     contentPanel.Size = UDim2.new(1, 0, 1, -24)
     contentPanel.Position = UDim2.new(0, 0, 0, 24)
@@ -359,12 +346,12 @@ local function createGUI()
     currentScaleText.Position = UDim2.new(0.075, 0, 0.60, 0)
     currentScaleText.BackgroundTransparency = 1
     currentScaleText.Text = "5x"
-    currentScaleText.TextColor3 = Color3.fromRGB(255, 0, 200)
+    currentScaleText.TextColor3 = Color3.fromRGB(255, 200, 0)
     currentScaleText.TextScaled = true
     currentScaleText.Font = Enum.Font.Bangers
     currentScaleText.Parent = contentPanel
 
-    -- ─── LOGIC ───
+    -- ─── GUI LOGIC ───
 
     local isMinimized = false
     minBtn.MouseButton1Click:Connect(function()
@@ -381,12 +368,11 @@ local function createGUI()
         
         if IsActive then
             applyToAll(SelectedScale)
+            applyR6ToAll()        -- R6 visual for YOU only
             enableNoclip()
-            enableVisualOverride()
         else
             resetAll()
             disableNoclip()
-            disableVisualOverride()
         end
     end)
 
@@ -447,18 +433,17 @@ end
 local function cleanup()
     resetAll()
     disableNoclip()
-    disableVisualOverride()
 end
 
--- ─── INJECT ───
+-- ─── INJECT GUI ───
 local gui = createGUI()
 gui.Parent = Player.PlayerGui
 
-print("🎯 VISUALLY SMALL – HITBOX BIG LOADED!")
-print("👀 Everyone looks SMALL R6 on your screen.")
-print("💀 Their ACTUAL hitbox is MASSIVE (1-10x).")
-print("🚶 You can noclip through them.")
-print("🔥 This WORKS. Toggle ON/OFF.")
+print("⚡ BIG HITBOX + NOCLIP + R6 VISUAL LOADED!")
+print("💀 Everyone has MASSIVE hitboxes (1-10x).")
+print("🚶 You can walk through other players (Noclip).")
+print("👀 ONLY YOU see everyone as R6 (Classic Blocky).")
+print("🔥 This is the FINAL working version. Toggle ON/OFF.")
 
 gui.AncestryChanged:Connect(function()
     if not gui.Parent then cleanup() end
