@@ -1,8 +1,8 @@
 --[[
-    R6 BLOCKY AVATARS + NOCLIP + HITBOX EXPANDER v10 – FINAL
-    - Forces ALL players to R6 (Classic Blocky) on your screen
-    - You can noclip through other players (walk through them)
-    - Their hitbox stays MASSIVE (1-10x) – bombs/melee register
+    SMALL R6 AVATARS + BIG HITBOX + NOCLIP v11 – FINAL CORRECT
+    - Everyone appears as SMALL R6 (Classic Blocky) on your screen
+    - Their hitbox is MASSIVE (1-10x) via invisible ghost parts
+    - You can noclip through other players
     - They move smooth, no flying, no glitching
     - Auto-applies to new players
     - Toggle ON/OFF instantly
@@ -14,14 +14,14 @@ local Players = game:GetService("Players")
 local Player = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local Workspace = game:GetService("Workspace")
 
 local IsActive = false
 local SelectedScale = 5
-local OriginalSizes = {} -- stores original sizes per player
+local GhostData = {} -- tracks ghost parts per player
 local NoclipConn = nil
+local HeartbeatConn = nil
 
--- ─── FORCE R6 ON A CHARACTER (CLASSIC BLOCKY) ───
+-- ─── FORCE R6 ON A CHARACTER (SMALL, NORMAL SIZE) ───
 local function forceR6(char)
     if not char then return end
     local humanoid = char:FindFirstChild("Humanoid")
@@ -33,7 +33,7 @@ local function forceR6(char)
         task.wait(0.1)
     end
     
-    -- Ensure all R6 parts exist and are blocky
+    -- Set R6 parts to NORMAL SIZE (not scaled)
     local r6Parts = {
         Head = Vector3.new(2, 2, 1),
         Torso = Vector3.new(2, 2.2, 1),
@@ -53,25 +53,15 @@ local function forceR6(char)
             part.CanCollide = true
             part.Parent = char
         else
-            -- Force blocky size
+            -- Force NORMAL blocky size (SMALL)
             part.Size = size
         end
     end
     
-    -- Remove any accessories or extra parts that ruin the blocky look
+    -- Remove accessories for clean R6 look
     for _, child in ipairs(char:GetChildren()) do
         if child:IsA("Accessory") or child:IsA("Hat") or child:IsA("Clothing") then
             child:Destroy()
-        end
-    end
-    
-    -- Remove any attachments or weird meshes
-    for _, descendant in ipairs(char:GetDescendants()) do
-        if descendant:IsA("Attachment") or descendant:IsA("Motor6D") then
-            -- Keep Motor6D for animation, but remove attachments
-            if descendant:IsA("Attachment") then
-                descendant:Destroy()
-            end
         end
     end
 end
@@ -88,70 +78,91 @@ local function getAllParts(char)
     return parts
 end
 
--- ─── SAVE ORIGINAL SIZES ───
-local function saveOriginalSizes(player)
-    if not player.Character then return end
-    OriginalSizes[player] = {}
-    for _, part in ipairs(getAllParts(player.Character)) do
-        OriginalSizes[player][part] = part.Size
-    end
-end
-
--- ─── APPLY HITBOX SCALE (SERVER SIDE) ───
-local function applyHitbox(player, scale)
+-- ─── CREATE GHOST HITBOX (INVISIBLE, MASSIVE) ───
+local function createGhostHitbox(player, scale)
     if player == Player then return end
     if not player.Character then return end
     
-    if not OriginalSizes[player] then
-        saveOriginalSizes(player)
+    local char = player.Character
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    
+    -- Remove old ghost if exists
+    if GhostData[player] then
+        if GhostData[player].part then
+            GhostData[player].part:Destroy()
+        end
+        GhostData[player] = nil
     end
     
-    local char = player.Character
-    for part, origSize in pairs(OriginalSizes[player]) do
-        if part and part.Parent then
-            -- Scale the ACTUAL part size (this is what server sees)
-            part.Size = Vector3.new(
-                origSize.X * scale,
-                origSize.Y * scale,
-                origSize.Z * scale
-            )
-        end
-    end
+    -- Create invisible giant hitbox
+    local ghost = Instance.new("Part")
+    local rootSize = root.Size
+    ghost.Size = Vector3.new(
+        rootSize.X * scale,
+        rootSize.Y * scale,
+        rootSize.Z * scale
+    )
+    ghost.CFrame = root.CFrame
+    ghost.Anchored = true
+    ghost.CanCollide = false      -- INTANGIBLE – you walk through
+    ghost.CanQuery = true         -- Registers for GetPartsInBounds
+    ghost.CanTouch = true         -- Registers for Touch events
+    ghost.Transparency = 1        -- Invisible
+    ghost.Material = Enum.Material.Plastic
+    ghost.Name = "GhostHitbox"
+    ghost.Parent = workspace
+    
+    GhostData[player] = {
+        part = ghost,
+        root = root,
+        scale = scale
+    }
 end
 
--- ─── RESET HITBOX ───
-local function resetHitbox(player)
-    if not OriginalSizes[player] then return end
-    for part, origSize in pairs(OriginalSizes[player]) do
-        if part and part.Parent then
-            part.Size = origSize
+-- ─── UPDATE GHOSTS EVERY FRAME ───
+local function updateGhosts()
+    for player, data in pairs(GhostData) do
+        if data.root and data.root.Parent then
+            data.part.CFrame = data.root.CFrame
+        else
+            if data.part then data.part:Destroy() end
+            GhostData[player] = nil
         end
     end
-    OriginalSizes[player] = nil
 end
 
 -- ─── APPLY TO ALL PLAYERS ───
 local function applyToAll(scale)
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= Player then
-            -- Force R6 first
             if player.Character then
-                forceR6(player.Character)
+                forceR6(player.Character)  -- SMALL R6 avatar
             end
-            applyHitbox(player, scale)
+            createGhostHitbox(player, scale)  -- BIG invisible hitbox
         end
     end
-end
-
--- ─── RESET ALL ───
-local function resetAll()
-    for player in pairs(OriginalSizes) do
-        resetHitbox(player)
+    if not HeartbeatConn then
+        HeartbeatConn = RunService.Heartbeat:Connect(updateGhosts)
     end
-    OriginalSizes = {}
 end
 
--- ─── NOCLIP THROUGH PLAYERS (CLIENT-SIDE) ───
+-- ─── RESET ALL GHOSTS ───
+local function resetAll()
+    for player in pairs(GhostData) do
+        if GhostData[player] and GhostData[player].part then
+            GhostData[player].part:Destroy()
+        end
+        GhostData[player] = nil
+    end
+    GhostData = {}
+    if HeartbeatConn then
+        HeartbeatConn:Disconnect()
+        HeartbeatConn = nil
+    end
+end
+
+-- ─── NOCLIP THROUGH PLAYERS ───
 local function enableNoclip()
     if NoclipConn then return end
     NoclipConn = RunService.Heartbeat:Connect(function()
@@ -159,7 +170,6 @@ local function enableNoclip()
         for _, player in ipairs(Players:GetPlayers()) do
             if player ~= Player and player.Character then
                 for _, part in ipairs(getAllParts(player.Character)) do
-                    -- Set CanCollide to false ONLY for you (client-side)
                     part.CanCollide = false
                 end
             end
@@ -172,7 +182,6 @@ local function disableNoclip()
         NoclipConn:Disconnect()
         NoclipConn = nil
     end
-    -- Reset CanCollide for all players
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= Player and player.Character then
             for _, part in ipairs(getAllParts(player.Character)) do
@@ -188,8 +197,7 @@ local function onCharacterAdded(player, char)
     task.wait(0.2)
     if IsActive then
         forceR6(char)
-        saveOriginalSizes(player)
-        applyHitbox(player, SelectedScale)
+        createGhostHitbox(player, SelectedScale)
     end
 end
 
@@ -219,7 +227,7 @@ end
 -- ─── TINY GUI ───
 local function createGUI()
     local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "R6NoclipHitboxGUI"
+    screenGui.Name = "SmallR6BigHitboxGUI"
     screenGui.ResetOnSpawn = false
 
     local mainFrame = Instance.new("Frame")
@@ -237,7 +245,7 @@ local function createGUI()
 
     local stroke = Instance.new("UIStroke")
     stroke.Thickness = 1.5
-    stroke.Color = Color3.fromRGB(0, 255, 255)
+    stroke.Color = Color3.fromRGB(0, 255, 100)
     stroke.Transparency = 0.6
     stroke.Parent = mainFrame
 
@@ -250,8 +258,8 @@ local function createGUI()
     local titleText = Instance.new("TextLabel")
     titleText.Size = UDim2.new(0.7, 0, 1, 0)
     titleText.BackgroundTransparency = 1
-    titleText.Text = "🧊 R6"
-    titleText.TextColor3 = Color3.fromRGB(0, 255, 255)
+    titleText.Text = "🎯 R6"
+    titleText.TextColor3 = Color3.fromRGB(0, 255, 100)
     titleText.TextScaled = true
     titleText.Font = Enum.Font.Bangers
     titleText.TextXAlignment = Enum.TextXAlignment.Left
@@ -289,7 +297,7 @@ local function createGUI()
     togCorner.Parent = toggleBtn
     toggleBtn.Parent = contentPanel
 
-    -- Scale label
+    -- Scale
     local scaleLabel = Instance.new("TextLabel")
     scaleLabel.Size = UDim2.new(0.5, 0, 0, 18)
     scaleLabel.Position = UDim2.new(0.075, 0, 0.28, 0)
@@ -348,7 +356,7 @@ local function createGUI()
     currentScaleText.Position = UDim2.new(0.075, 0, 0.60, 0)
     currentScaleText.BackgroundTransparency = 1
     currentScaleText.Text = "5x"
-    currentScaleText.TextColor3 = Color3.fromRGB(0, 255, 255)
+    currentScaleText.TextColor3 = Color3.fromRGB(0, 255, 100)
     currentScaleText.TextScaled = true
     currentScaleText.Font = Enum.Font.Bangers
     currentScaleText.Parent = contentPanel
@@ -440,11 +448,11 @@ end
 local gui = createGUI()
 gui.Parent = Player.PlayerGui
 
-print("🧊 R6 BLOCKY AVATARS + NOCLIP + HITBOX EXPANDER LOADED!")
-print("🎯 Everyone is R6 (Classic Blocky) on your screen.")
-print("🚶 You can walk through other players (Noclip).")
+print("🎯 SMALL R6 AVATARS + BIG HITBOX + NOCLIP LOADED!")
+print("👀 Everyone appears as SMALL R6 (Classic Blocky) on your screen.")
 print("💀 Their hitbox is MASSIVE (1-10x) – bombs/melee register.")
-print("🔥 They move smooth. Toggle ON/OFF anytime.")
+print("🚶 You can walk through other players (Noclip).")
+print("🔥 Toggle ON/OFF anytime.")
 
 gui.AncestryChanged:Connect(function()
     if not gui.Parent then cleanup() end
