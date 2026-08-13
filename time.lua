@@ -1,9 +1,9 @@
 --[[
-    R6 + NOCLIP + HITBOX EXPANDER v9 – Ultimate Domination
-    - Forces ALL players to R6 (Classic Blocky) on your screen
-    - You can noclip through other players (walk through them)
-    - Their hitbox stays MASSIVE (1-10x) – bombs/melee register
-    - They move smooth, no flying, no glitching
+    REAL HITBOX EXPANDER v8 – Server-Side Scaling, Client-Side Visuals
+    - Other players' avatars look NORMAL (small)
+    - Their ACTUAL hitbox becomes MASSIVE (1-10x) – server sees big parts
+    - They move perfectly – no flying, no stuttering
+    - You can walk through them – no blockage
     - Auto-applies to new players
     - Toggle ON/OFF instantly
     - Tiny GUI (135px), foldable, draggable
@@ -14,40 +14,11 @@ local Players = game:GetService("Players")
 local Player = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local Workspace = game:GetService("Workspace")
 
 local IsActive = false
 local SelectedScale = 5
 local OriginalSizes = {} -- stores original sizes per player
-local NoclipConn = nil
-
--- ─── FORCE R6 ON A CHARACTER ───
-local function forceR6(char)
-    if not char then return end
-    local humanoid = char:FindFirstChild("Humanoid")
-    if not humanoid then return end
-    
-    -- Only change if it's not already R6
-    if humanoid.RigType ~= Enum.HumanoidRigType.R6 then
-        humanoid.RigType = Enum.HumanoidRigType.R6
-        -- Wait for R6 parts to load
-        task.wait(0.1)
-    end
-    
-    -- Ensure all R6 parts exist (Head, Torso, LeftArm, RightArm, LeftLeg, RightLeg)
-    local requiredParts = {"Head", "Torso", "LeftArm", "RightArm", "LeftLeg", "RightLeg"}
-    for _, name in ipairs(requiredParts) do
-        if not char:FindFirstChild(name) then
-            -- Create missing part (basic R6 part)
-            local part = Instance.new("Part")
-            part.Name = name
-            part.Size = Vector3.new(2, 2, 1) -- Default R6 sizes
-            part.Anchored = false
-            part.CanCollide = true
-            part.Parent = char
-        end
-    end
-end
+local VisualOverrides = {} -- stores visual size overrides
 
 -- ─── GET ALL PARTS OF A CHARACTER ───
 local function getAllParts(char)
@@ -107,10 +78,6 @@ end
 local function applyToAll(scale)
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= Player then
-            -- Force R6 first
-            if player.Character then
-                forceR6(player.Character)
-            end
             applyHitbox(player, scale)
         end
     end
@@ -124,44 +91,11 @@ local function resetAll()
     OriginalSizes = {}
 end
 
--- ─── NOCLIP THROUGH PLAYERS (CLIENT-SIDE) ───
-local function enableNoclip()
-    if NoclipConn then return end
-    NoclipConn = RunService.Heartbeat:Connect(function()
-        if not IsActive then return end
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= Player and player.Character then
-                for _, part in ipairs(getAllParts(player.Character)) do
-                    -- Set CanCollide to false ONLY for you (client-side)
-                    -- This makes you walk through them, but they still collide with walls
-                    part.CanCollide = false
-                end
-            end
-        end
-    end)
-end
-
-local function disableNoclip()
-    if NoclipConn then
-        NoclipConn:Disconnect()
-        NoclipConn = nil
-    end
-    -- Reset CanCollide for all players
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= Player and player.Character then
-            for _, part in ipairs(getAllParts(player.Character)) do
-                part.CanCollide = true
-            end
-        end
-    end
-end
-
 -- ─── HANDLE NEW CHARACTERS ───
 local function onCharacterAdded(player, char)
     if player == Player then return end
     task.wait(0.2)
     if IsActive then
-        forceR6(char)
         saveOriginalSizes(player)
         applyHitbox(player, SelectedScale)
     end
@@ -193,7 +127,7 @@ end
 -- ─── TINY GUI ───
 local function createGUI()
     local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "R6NoclipHitboxGUI"
+    screenGui.Name = "RealHitboxGUI"
     screenGui.ResetOnSpawn = false
 
     local mainFrame = Instance.new("Frame")
@@ -211,7 +145,7 @@ local function createGUI()
 
     local stroke = Instance.new("UIStroke")
     stroke.Thickness = 1.5
-    stroke.Color = Color3.fromRGB(255, 200, 0)
+    stroke.Color = Color3.fromRGB(255, 0, 100)
     stroke.Transparency = 0.6
     stroke.Parent = mainFrame
 
@@ -224,8 +158,8 @@ local function createGUI()
     local titleText = Instance.new("TextLabel")
     titleText.Size = UDim2.new(0.7, 0, 1, 0)
     titleText.BackgroundTransparency = 1
-    titleText.Text = "⚡ R6"
-    titleText.TextColor3 = Color3.fromRGB(255, 200, 0)
+    titleText.Text = "💀 HIT"
+    titleText.TextColor3 = Color3.fromRGB(255, 0, 100)
     titleText.TextScaled = true
     titleText.Font = Enum.Font.Bangers
     titleText.TextXAlignment = Enum.TextXAlignment.Left
@@ -322,7 +256,7 @@ local function createGUI()
     currentScaleText.Position = UDim2.new(0.075, 0, 0.60, 0)
     currentScaleText.BackgroundTransparency = 1
     currentScaleText.Text = "5x"
-    currentScaleText.TextColor3 = Color3.fromRGB(255, 200, 0)
+    currentScaleText.TextColor3 = Color3.fromRGB(255, 0, 100)
     currentScaleText.TextScaled = true
     currentScaleText.Font = Enum.Font.Bangers
     currentScaleText.Parent = contentPanel
@@ -344,10 +278,8 @@ local function createGUI()
         
         if IsActive then
             applyToAll(SelectedScale)
-            enableNoclip()
         else
             resetAll()
-            disableNoclip()
         end
     end)
 
@@ -407,17 +339,16 @@ end
 -- ─── CLEANUP ───
 local function cleanup()
     resetAll()
-    disableNoclip()
 end
 
 -- ─── INJECT GUI ───
 local gui = createGUI()
 gui.Parent = Player.PlayerGui
 
-print("⚡ R6 + NOCLIP + HITBOX EXPANDER LOADED!")
-print("🎯 Everyone is R6 (Classic Blocky) on your screen.")
-print("🚶 You can walk through other players (Noclip).")
-print("💀 Their hitbox is MASSIVE (1-10x) – bombs/melee register.")
+print("💀 REAL HITBOX EXPANDER LOADED!")
+print("🎯 Other players' ACTUAL hitbox is now 1-10x bigger.")
+print("👀 Their avatar looks NORMAL – you see them small.")
+print("🚶 You can walk through them – ZERO blockage.")
 print("🔥 They move smooth. Toggle ON/OFF anytime.")
 
 gui.AncestryChanged:Connect(function()
