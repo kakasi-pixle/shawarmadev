@@ -1,8 +1,8 @@
 --[[
-    SMALL R6 AVATARS + BIG HITBOX + NOCLIP v11 – FINAL CORRECT
-    - Everyone appears as SMALL R6 (Classic Blocky) on your screen
-    - Their hitbox is MASSIVE (1-10x) via invisible ghost parts
-    - You can noclip through other players
+    R6 + NOCLIP + HITBOX EXPANDER v9 – Ultimate Domination
+    - Forces ALL players to R6 (Classic Blocky) on your screen
+    - You can noclip through other players (walk through them)
+    - Their hitbox stays MASSIVE (1-10x) – bombs/melee register
     - They move smooth, no flying, no glitching
     - Auto-applies to new players
     - Toggle ON/OFF instantly
@@ -14,54 +14,37 @@ local Players = game:GetService("Players")
 local Player = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 
 local IsActive = false
 local SelectedScale = 5
-local GhostData = {} -- tracks ghost parts per player
+local OriginalSizes = {} -- stores original sizes per player
 local NoclipConn = nil
-local HeartbeatConn = nil
 
--- ─── FORCE R6 ON A CHARACTER (SMALL, NORMAL SIZE) ───
+-- ─── FORCE R6 ON A CHARACTER ───
 local function forceR6(char)
     if not char then return end
     local humanoid = char:FindFirstChild("Humanoid")
     if not humanoid then return end
     
-    -- Force R6 rig type
+    -- Only change if it's not already R6
     if humanoid.RigType ~= Enum.HumanoidRigType.R6 then
         humanoid.RigType = Enum.HumanoidRigType.R6
+        -- Wait for R6 parts to load
         task.wait(0.1)
     end
     
-    -- Set R6 parts to NORMAL SIZE (not scaled)
-    local r6Parts = {
-        Head = Vector3.new(2, 2, 1),
-        Torso = Vector3.new(2, 2.2, 1),
-        LeftArm = Vector3.new(1, 2, 1),
-        RightArm = Vector3.new(1, 2, 1),
-        LeftLeg = Vector3.new(1, 2, 1),
-        RightLeg = Vector3.new(1, 2, 1)
-    }
-    
-    for name, size in pairs(r6Parts) do
-        local part = char:FindFirstChild(name)
-        if not part then
-            part = Instance.new("Part")
+    -- Ensure all R6 parts exist (Head, Torso, LeftArm, RightArm, LeftLeg, RightLeg)
+    local requiredParts = {"Head", "Torso", "LeftArm", "RightArm", "LeftLeg", "RightLeg"}
+    for _, name in ipairs(requiredParts) do
+        if not char:FindFirstChild(name) then
+            -- Create missing part (basic R6 part)
+            local part = Instance.new("Part")
             part.Name = name
-            part.Size = size
+            part.Size = Vector3.new(2, 2, 1) -- Default R6 sizes
             part.Anchored = false
             part.CanCollide = true
             part.Parent = char
-        else
-            -- Force NORMAL blocky size (SMALL)
-            part.Size = size
-        end
-    end
-    
-    -- Remove accessories for clean R6 look
-    for _, child in ipairs(char:GetChildren()) do
-        if child:IsA("Accessory") or child:IsA("Hat") or child:IsA("Clothing") then
-            child:Destroy()
         end
     end
 end
@@ -78,91 +61,70 @@ local function getAllParts(char)
     return parts
 end
 
--- ─── CREATE GHOST HITBOX (INVISIBLE, MASSIVE) ───
-local function createGhostHitbox(player, scale)
+-- ─── SAVE ORIGINAL SIZES ───
+local function saveOriginalSizes(player)
+    if not player.Character then return end
+    OriginalSizes[player] = {}
+    for _, part in ipairs(getAllParts(player.Character)) do
+        OriginalSizes[player][part] = part.Size
+    end
+end
+
+-- ─── APPLY HITBOX SCALE (SERVER SIDE) ───
+local function applyHitbox(player, scale)
     if player == Player then return end
     if not player.Character then return end
     
-    local char = player.Character
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    
-    -- Remove old ghost if exists
-    if GhostData[player] then
-        if GhostData[player].part then
-            GhostData[player].part:Destroy()
-        end
-        GhostData[player] = nil
+    if not OriginalSizes[player] then
+        saveOriginalSizes(player)
     end
     
-    -- Create invisible giant hitbox
-    local ghost = Instance.new("Part")
-    local rootSize = root.Size
-    ghost.Size = Vector3.new(
-        rootSize.X * scale,
-        rootSize.Y * scale,
-        rootSize.Z * scale
-    )
-    ghost.CFrame = root.CFrame
-    ghost.Anchored = true
-    ghost.CanCollide = false      -- INTANGIBLE – you walk through
-    ghost.CanQuery = true         -- Registers for GetPartsInBounds
-    ghost.CanTouch = true         -- Registers for Touch events
-    ghost.Transparency = 1        -- Invisible
-    ghost.Material = Enum.Material.Plastic
-    ghost.Name = "GhostHitbox"
-    ghost.Parent = workspace
-    
-    GhostData[player] = {
-        part = ghost,
-        root = root,
-        scale = scale
-    }
+    local char = player.Character
+    for part, origSize in pairs(OriginalSizes[player]) do
+        if part and part.Parent then
+            -- Scale the ACTUAL part size (this is what server sees)
+            part.Size = Vector3.new(
+                origSize.X * scale,
+                origSize.Y * scale,
+                origSize.Z * scale
+            )
+        end
+    end
 end
 
--- ─── UPDATE GHOSTS EVERY FRAME ───
-local function updateGhosts()
-    for player, data in pairs(GhostData) do
-        if data.root and data.root.Parent then
-            data.part.CFrame = data.root.CFrame
-        else
-            if data.part then data.part:Destroy() end
-            GhostData[player] = nil
+-- ─── RESET HITBOX ───
+local function resetHitbox(player)
+    if not OriginalSizes[player] then return end
+    for part, origSize in pairs(OriginalSizes[player]) do
+        if part and part.Parent then
+            part.Size = origSize
         end
     end
+    OriginalSizes[player] = nil
 end
 
 -- ─── APPLY TO ALL PLAYERS ───
 local function applyToAll(scale)
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= Player then
+            -- Force R6 first
             if player.Character then
-                forceR6(player.Character)  -- SMALL R6 avatar
+                forceR6(player.Character)
             end
-            createGhostHitbox(player, scale)  -- BIG invisible hitbox
+            applyHitbox(player, scale)
         end
-    end
-    if not HeartbeatConn then
-        HeartbeatConn = RunService.Heartbeat:Connect(updateGhosts)
     end
 end
 
--- ─── RESET ALL GHOSTS ───
+-- ─── RESET ALL ───
 local function resetAll()
-    for player in pairs(GhostData) do
-        if GhostData[player] and GhostData[player].part then
-            GhostData[player].part:Destroy()
-        end
-        GhostData[player] = nil
+    for player in pairs(OriginalSizes) do
+        resetHitbox(player)
     end
-    GhostData = {}
-    if HeartbeatConn then
-        HeartbeatConn:Disconnect()
-        HeartbeatConn = nil
-    end
+    OriginalSizes = {}
 end
 
--- ─── NOCLIP THROUGH PLAYERS ───
+-- ─── NOCLIP THROUGH PLAYERS (CLIENT-SIDE) ───
 local function enableNoclip()
     if NoclipConn then return end
     NoclipConn = RunService.Heartbeat:Connect(function()
@@ -170,6 +132,8 @@ local function enableNoclip()
         for _, player in ipairs(Players:GetPlayers()) do
             if player ~= Player and player.Character then
                 for _, part in ipairs(getAllParts(player.Character)) do
+                    -- Set CanCollide to false ONLY for you (client-side)
+                    -- This makes you walk through them, but they still collide with walls
                     part.CanCollide = false
                 end
             end
@@ -182,6 +146,7 @@ local function disableNoclip()
         NoclipConn:Disconnect()
         NoclipConn = nil
     end
+    -- Reset CanCollide for all players
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= Player and player.Character then
             for _, part in ipairs(getAllParts(player.Character)) do
@@ -197,7 +162,8 @@ local function onCharacterAdded(player, char)
     task.wait(0.2)
     if IsActive then
         forceR6(char)
-        createGhostHitbox(player, SelectedScale)
+        saveOriginalSizes(player)
+        applyHitbox(player, SelectedScale)
     end
 end
 
@@ -227,7 +193,7 @@ end
 -- ─── TINY GUI ───
 local function createGUI()
     local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "SmallR6BigHitboxGUI"
+    screenGui.Name = "R6NoclipHitboxGUI"
     screenGui.ResetOnSpawn = false
 
     local mainFrame = Instance.new("Frame")
@@ -245,7 +211,7 @@ local function createGUI()
 
     local stroke = Instance.new("UIStroke")
     stroke.Thickness = 1.5
-    stroke.Color = Color3.fromRGB(0, 255, 100)
+    stroke.Color = Color3.fromRGB(255, 200, 0)
     stroke.Transparency = 0.6
     stroke.Parent = mainFrame
 
@@ -258,8 +224,8 @@ local function createGUI()
     local titleText = Instance.new("TextLabel")
     titleText.Size = UDim2.new(0.7, 0, 1, 0)
     titleText.BackgroundTransparency = 1
-    titleText.Text = "🎯 R6"
-    titleText.TextColor3 = Color3.fromRGB(0, 255, 100)
+    titleText.Text = "⚡ R6"
+    titleText.TextColor3 = Color3.fromRGB(255, 200, 0)
     titleText.TextScaled = true
     titleText.Font = Enum.Font.Bangers
     titleText.TextXAlignment = Enum.TextXAlignment.Left
@@ -297,7 +263,7 @@ local function createGUI()
     togCorner.Parent = toggleBtn
     toggleBtn.Parent = contentPanel
 
-    -- Scale
+    -- Scale label
     local scaleLabel = Instance.new("TextLabel")
     scaleLabel.Size = UDim2.new(0.5, 0, 0, 18)
     scaleLabel.Position = UDim2.new(0.075, 0, 0.28, 0)
@@ -356,7 +322,7 @@ local function createGUI()
     currentScaleText.Position = UDim2.new(0.075, 0, 0.60, 0)
     currentScaleText.BackgroundTransparency = 1
     currentScaleText.Text = "5x"
-    currentScaleText.TextColor3 = Color3.fromRGB(0, 255, 100)
+    currentScaleText.TextColor3 = Color3.fromRGB(255, 200, 0)
     currentScaleText.TextScaled = true
     currentScaleText.Font = Enum.Font.Bangers
     currentScaleText.Parent = contentPanel
@@ -448,11 +414,11 @@ end
 local gui = createGUI()
 gui.Parent = Player.PlayerGui
 
-print("🎯 SMALL R6 AVATARS + BIG HITBOX + NOCLIP LOADED!")
-print("👀 Everyone appears as SMALL R6 (Classic Blocky) on your screen.")
-print("💀 Their hitbox is MASSIVE (1-10x) – bombs/melee register.")
+print("⚡ R6 + NOCLIP + HITBOX EXPANDER LOADED!")
+print("🎯 Everyone is R6 (Classic Blocky) on your screen.")
 print("🚶 You can walk through other players (Noclip).")
-print("🔥 Toggle ON/OFF anytime.")
+print("💀 Their hitbox is MASSIVE (1-10x) – bombs/melee register.")
+print("🔥 They move smooth. Toggle ON/OFF anytime.")
 
 gui.AncestryChanged:Connect(function()
     if not gui.Parent then cleanup() end
