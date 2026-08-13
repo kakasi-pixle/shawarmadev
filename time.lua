@@ -1,7 +1,9 @@
 --[[
-    FAT HITBOX, SKINNY AVATAR v6
-    - Other players' avatars stay NORMAL (small, smooth)
-    - Their hitbox becomes MASSIVE (1-10x) via invisible ghost parts
+    PURE HITBOX EXPANDER v7 – Intangible, Massive, Smooth
+    - Other players' avatars stay NORMAL
+    - Their hitbox becomes MASSIVE (1-10x) via intangible ghost parts
+    - YOU CAN WALK THROUGH THEM – no physical blockage
+    - They move perfectly – no flying, no stuttering
     - Auto-applies to new players
     - Toggle ON/OFF instantly
     - Tiny GUI (135px), foldable, draggable
@@ -18,7 +20,7 @@ local SelectedScale = 5
 local GhostData = {} -- tracks ghost parts per player
 local HeartbeatConn = nil
 
--- ─── CREATE A GHOST HITBOX FOR A PLAYER ───
+-- ─── CREATE AN INTANGIBLE GHOST HITBOX FOR A PLAYER ───
 local function createGhostHitbox(player, scale)
     if player == Player then return end          -- Skip yourself
     if not player.Character then return end
@@ -35,7 +37,7 @@ local function createGhostHitbox(player, scale)
         GhostData[player] = nil
     end
     
-    -- Create the invisible giant hitbox
+    -- Create the invisible giant hitbox (INTANGIBLE)
     local ghost = Instance.new("Part")
     local rootSize = root.Size
     ghost.Size = Vector3.new(
@@ -44,14 +46,14 @@ local function createGhostHitbox(player, scale)
         rootSize.Z * scale
     )
     ghost.CFrame = root.CFrame
-    ghost.Anchored = true          -- CRITICAL: No physics interference
-    ghost.CanCollide = true        -- Registers as solid for Touch/GetParts
-    ghost.CanQuery = true
-    ghost.CanTouch = true
-    ghost.Transparency = 1         -- Completely invisible
+    ghost.Anchored = true                -- No physics interference
+    ghost.CanCollide = false             -- YOU CAN WALK THROUGH – CRITICAL
+    ghost.CanQuery = true                -- Registers for GetPartsInBounds
+    ghost.CanTouch = true                -- Registers for Touch events
+    ghost.Transparency = 1               -- Completely invisible
     ghost.Material = Enum.Material.Plastic
     ghost.Name = "GhostHitbox"
-    ghost.Parent = workspace       -- Needs to be in workspace to interact
+    ghost.Parent = workspace             -- Needs to be in workspace to interact
     
     -- Store for updating
     GhostData[player] = {
@@ -147,7 +149,7 @@ end
 -- ─── TINY GUI (135px, FOLDABLE, DRAGGABLE) ───
 local function createGUI()
     local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "FatHitboxGUI"
+    screenGui.Name = "PureHitboxGUI"
     screenGui.ResetOnSpawn = false
 
     local mainFrame = Instance.new("Frame")
@@ -165,7 +167,7 @@ local function createGUI()
 
     local stroke = Instance.new("UIStroke")
     stroke.Thickness = 1.5
-    stroke.Color = Color3.fromRGB(255, 50, 100)
+    stroke.Color = Color3.fromRGB(0, 255, 200)
     stroke.Transparency = 0.6
     stroke.Parent = mainFrame
 
@@ -178,8 +180,8 @@ local function createGUI()
     local titleText = Instance.new("TextLabel")
     titleText.Size = UDim2.new(0.7, 0, 1, 0)
     titleText.BackgroundTransparency = 1
-    titleText.Text = "🎯 FAT"
-    titleText.TextColor3 = Color3.fromRGB(255, 50, 100)
+    titleText.Text = "🎯 HIT"
+    titleText.TextColor3 = Color3.fromRGB(0, 255, 200)
     titleText.TextScaled = true
     titleText.Font = Enum.Font.Bangers
     titleText.TextXAlignment = Enum.TextXAlignment.Left
@@ -280,7 +282,7 @@ local function createGUI()
     currentScaleText.Position = UDim2.new(0.075, 0, 0.60, 0)
     currentScaleText.BackgroundTransparency = 1
     currentScaleText.Text = "5x"
-    currentScaleText.TextColor3 = Color3.fromRGB(255, 50, 100)
+    currentScaleText.TextColor3 = Color3.fromRGB(0, 255, 200)
     currentScaleText.TextScaled = true
     currentScaleText.Font = Enum.Font.Bangers
     currentScaleText.Parent = contentPanel
@@ -379,8 +381,9 @@ end
 local gui = createGUI()
 gui.Parent = Player.PlayerGui
 
-print("🎯 FAT HITBOX, SKINNY AVATAR LOADED!")
-print("💀 Other players look normal, but their hitbox is MASSIVE (1-10x).")
+print("🎯 PURE HITBOX EXPANDER LOADED!")
+print("💀 Other players have MASSIVE hitboxes (1-10x).")
+print("🚶 You can walk right through them – ZERO blockage.")
 print("🔥 They move smooth, you dominate. Toggle ON/OFF anytime.")
 
 gui.AncestryChanged:Connect(function()
