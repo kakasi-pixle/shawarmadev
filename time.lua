@@ -1,10 +1,10 @@
 --[[
-    OPPONENT HITBOX INFLATOR v3
-    - Scales EVERY OTHER player's hitbox (1x to 10x)
-    - Your character stays untouched
-    - Tiny foldable GUI (140px)
-    - Auto-applies to new players
-    - Resets perfectly on toggle OFF
+    GHOST HITBOX v4 – Invisible, Massive, Undetectable
+    - Other players' VISUAL model stays normal
+    - Their HITBOX becomes 1-10x bigger (invisible)
+    - They move smooth as butter
+    - Your hitbox untouched
+    - Tiny foldable GUI
     Works on: Delta, Felix, Codex, Synapse, Krnl, etc.
 ]]
 
@@ -14,108 +14,118 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local IsActive = false
-local SelectedScale = 5 -- default scale (1-10)
-local OriginalSizes = {} -- stores original sizes per player
-local Connections = {} -- track connections for cleanup
+local SelectedScale = 5
+local GhostParts = {} -- track invisible hitboxes per player
 
--- Get all parts of a character
-local function getAllParts(char)
-    local parts = {}
-    if not char then return parts end
-    for _, v in ipairs(char:GetDescendants()) do
-        if v:IsA("BasePart") and v.Name ~= "HumanoidRootPart" then
-            table.insert(parts, v)
-        end
-    end
-    return parts
-end
-
--- Save original sizes for a player
-local function savePlayerSizes(player)
-    if not player.Character then return end
-    OriginalSizes[player] = {}
-    for _, part in ipairs(getAllParts(player.Character)) do
-        OriginalSizes[player][part] = part.Size
-    end
-end
-
--- Apply hitbox scale to a specific player
-local function applyToPlayer(player, scale)
-    if player == Player then return end -- Skip yourself
+-- Create invisible hitbox attachments for a player
+local function createGhostHitbox(player, scale)
+    if player == Player then return end
     if not player.Character then return end
     
-    if not OriginalSizes[player] then
-        savePlayerSizes(player)
+    local char = player.Character
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    
+    -- Clean old ghost parts first
+    if GhostParts[player] then
+        for _, part in ipairs(GhostParts[player]) do
+            part:Destroy()
+        end
+        GhostParts[player] = nil
     end
     
-    for part, origSize in pairs(OriginalSizes[player]) do
-        if part and part.Parent then
-            local s = scale
-            -- Make RootPart extra big for maximum hitbox
-            if part.Name == "HumanoidRootPart" then
-                s = scale * 1.5
-            end
-            part.Size = Vector3.new(origSize.X * s, origSize.Y * s, origSize.Z * s)
+    local ghostGroup = {}
+    local rootSize = root.Size
+    
+    -- Create a giant invisible hitbox around the RootPart
+    local ghostBox = Instance.new("Part")
+    ghostBox.Size = Vector3.new(rootSize.X * scale, rootSize.Y * scale, rootSize.Z * scale)
+    ghostBox.CFrame = root.CFrame
+    ghostBox.Anchored = false
+    ghostBox.CanCollide = true
+    ghostBox.CanQuery = true
+    ghostBox.CanTouch = true
+    ghostBox.Transparency = 1
+    ghostBox.Material = Enum.Material.Plastic
+    ghostBox.Name = "GhostHitbox"
+    ghostBox.Parent = char
+    
+    -- Attach it to the RootPart so it follows perfectly
+    local weld = Instance.new("Weld")
+    weld.Part0 = root
+    weld.Part1 = ghostBox
+    weld.C0 = CFrame.new(0, 0, 0)
+    weld.C1 = CFrame.new(0, 0, 0)
+    weld.Parent = ghostBox
+    
+    table.insert(ghostGroup, ghostBox)
+    
+    -- Optionally add extra boxes for arms/legs if you want even more coverage
+    local extraParts = {"Head", "LeftArm", "RightArm", "LeftLeg", "RightLeg"}
+    for _, name in ipairs(extraParts) do
+        local part = char:FindFirstChild(name)
+        if part then
+            local ghost = Instance.new("Part")
+            local pSize = part.Size
+            ghost.Size = Vector3.new(pSize.X * scale * 0.8, pSize.Y * scale * 0.8, pSize.Z * scale * 0.8)
+            ghost.CFrame = part.CFrame
+            ghost.Anchored = false
+            ghost.CanCollide = true
+            ghost.CanQuery = true
+            ghost.CanTouch = true
+            ghost.Transparency = 1
+            ghost.Material = Enum.Material.Plastic
+            ghost.Name = "GhostHitbox"
+            ghost.Parent = char
+            
+            local weld2 = Instance.new("Weld")
+            weld2.Part0 = part
+            weld2.Part1 = ghost
+            weld2.C0 = CFrame.new(0, 0, 0)
+            weld2.C1 = CFrame.new(0, 0, 0)
+            weld2.Parent = ghost
+            
+            table.insert(ghostGroup, ghost)
         end
     end
+    
+    GhostParts[player] = ghostGroup
 end
 
--- Apply to ALL other players
+-- Apply to all players
 local function applyToAll(scale)
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= Player then
-            applyToPlayer(player, scale)
+            createGhostHitbox(player, scale)
         end
     end
 end
 
--- Reset a specific player's hitbox
-local function resetPlayer(player)
-    if not OriginalSizes[player] then return end
-    for part, origSize in pairs(OriginalSizes[player]) do
-        if part and part.Parent then
-            part.Size = origSize
+-- Remove ghost hitboxes from a player
+local function removeGhostHitbox(player)
+    if GhostParts[player] then
+        for _, part in ipairs(GhostParts[player]) do
+            part:Destroy()
         end
+        GhostParts[player] = nil
     end
-    OriginalSizes[player] = nil
 end
 
--- Reset ALL players
+-- Reset all ghost hitboxes
 local function resetAll()
-    for player in pairs(OriginalSizes) do
-        resetPlayer(player)
+    for player in pairs(GhostParts) do
+        removeGhostHitbox(player)
     end
-    OriginalSizes = {}
+    GhostParts = {}
 end
 
--- Cleanup connections for a player
-local function cleanupPlayer(player)
-    if Connections[player] then
-        Connections[player]:Disconnect()
-        Connections[player] = nil
-    end
-end
-
--- Character added handler
-local function onCharacterAdded(player, character)
+-- Handle new characters
+local function onCharacterAdded(player, char)
     if player == Player then return end
-    wait(0.3) -- Wait for parts to load
+    wait(0.3)
     if IsActive then
-        savePlayerSizes(player)
-        applyToPlayer(player, SelectedScale)
+        createGhostHitbox(player, SelectedScale)
     end
-    
-    -- Watch for new parts being added (for accessories, etc.)
-    local partConn = character.ChildAdded:Connect(function(child)
-        if child:IsA("BasePart") and IsActive and player ~= Player then
-            -- Save original size for new part
-            if OriginalSizes[player] then
-                OriginalSizes[player][child] = child.Size
-            end
-            applyToPlayer(player, SelectedScale)
-        end
-    end)
-    Connections[player] = partConn
 end
 
 -- Player added handler
@@ -129,11 +139,10 @@ Players.PlayerAdded:Connect(function(player)
     end
 end)
 
--- Handle existing players
+-- Existing players
 for _, player in ipairs(Players:GetPlayers()) do
     if player ~= Player then
         if player.Character then
-            savePlayerSizes(player)
             onCharacterAdded(player, player.Character)
         end
         player.CharacterAdded:Connect(function(char)
@@ -142,16 +151,16 @@ for _, player in ipairs(Players:GetPlayers()) do
     end
 end
 
--- ─── TINY FOLDABLE GUI (140px) ───
+-- ─── GUI (140px, foldable, draggable) ───
 local function createGUI()
     local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "HitboxInflator"
+    screenGui.Name = "GhostHitboxGUI"
     screenGui.ResetOnSpawn = false
 
     local mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0, 140, 0, 180)
-    mainFrame.Position = UDim2.new(0.02, 0, 0.3, 0)
-    mainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 20)
+    mainFrame.Size = UDim2.new(0, 140, 0, 170)
+    mainFrame.Position = UDim2.new(0.02, 0, 0.35, 0)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 18)
     mainFrame.BackgroundTransparency = 0.15
     mainFrame.BorderSizePixel = 0
     mainFrame.ClipsDescendants = true
@@ -161,14 +170,13 @@ local function createGUI()
     corner.CornerRadius = UDim.new(0, 8)
     corner.Parent = mainFrame
 
-    -- Glow border
     local stroke = Instance.new("UIStroke")
     stroke.Thickness = 1.5
-    stroke.Color = Color3.fromRGB(0, 200, 255)
-    stroke.Transparency = 0.5
+    stroke.Color = Color3.fromRGB(200, 50, 255)
+    stroke.Transparency = 0.6
     stroke.Parent = mainFrame
 
-    -- Title bar (draggable + minimize)
+    -- Title
     local titleBar = Instance.new("Frame")
     titleBar.Size = UDim2.new(1, 0, 0, 26)
     titleBar.BackgroundTransparency = 1
@@ -177,14 +185,13 @@ local function createGUI()
     local titleText = Instance.new("TextLabel")
     titleText.Size = UDim2.new(0.7, 0, 1, 0)
     titleText.BackgroundTransparency = 1
-    titleText.Text = "🎯 HIT"
-    titleText.TextColor3 = Color3.fromRGB(100, 220, 255)
+    titleText.Text = "👻 GHOST"
+    titleText.TextColor3 = Color3.fromRGB(200, 100, 255)
     titleText.TextScaled = true
     titleText.Font = Enum.Font.Bangers
     titleText.TextXAlignment = Enum.TextXAlignment.Left
     titleText.Parent = titleBar
 
-    -- Minimize button
     local minBtn = Instance.new("TextButton")
     minBtn.Size = UDim2.new(0, 26, 1, 0)
     minBtn.Position = UDim2.new(0.8, 0, 0, 0)
@@ -195,14 +202,14 @@ local function createGUI()
     minBtn.Font = Enum.Font.GothamBold
     minBtn.Parent = titleBar
 
-    -- Content panel
+    -- Content
     local contentPanel = Instance.new("Frame")
     contentPanel.Size = UDim2.new(1, 0, 1, -26)
     contentPanel.Position = UDim2.new(0, 0, 0, 26)
     contentPanel.BackgroundTransparency = 1
     contentPanel.Parent = mainFrame
 
-    -- Toggle Button
+    -- Toggle
     local toggleBtn = Instance.new("TextButton")
     toggleBtn.Size = UDim2.new(0.85, 0, 0, 32)
     toggleBtn.Position = UDim2.new(0.075, 0, 0.05, 0)
@@ -217,10 +224,10 @@ local function createGUI()
     togCorner.Parent = toggleBtn
     toggleBtn.Parent = contentPanel
 
-    -- Scale selector (1-10 slider + display)
+    -- Scale display
     local scaleLabel = Instance.new("TextLabel")
     scaleLabel.Size = UDim2.new(0.5, 0, 0, 20)
-    scaleLabel.Position = UDim2.new(0.075, 0, 0.27, 0)
+    scaleLabel.Position = UDim2.new(0.075, 0, 0.30, 0)
     scaleLabel.BackgroundTransparency = 1
     scaleLabel.Text = "Scale"
     scaleLabel.TextColor3 = Color3.fromRGB(180, 180, 200)
@@ -231,7 +238,7 @@ local function createGUI()
 
     local scaleDisplay = Instance.new("TextButton")
     scaleDisplay.Size = UDim2.new(0.3, 0, 0, 24)
-    scaleDisplay.Position = UDim2.new(0.6, 0, 0.27, 0)
+    scaleDisplay.Position = UDim2.new(0.6, 0, 0.30, 0)
     scaleDisplay.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
     scaleDisplay.Text = "5"
     scaleDisplay.TextColor3 = Color3.fromRGB(255, 200, 100)
@@ -243,10 +250,9 @@ local function createGUI()
     sdCorner.Parent = scaleDisplay
     scaleDisplay.Parent = contentPanel
 
-    -- +/- buttons for scale
     local minusBtn = Instance.new("TextButton")
     minusBtn.Size = UDim2.new(0.2, 0, 0, 24)
-    minusBtn.Position = UDim2.new(0.075, 0, 0.42, 0)
+    minusBtn.Position = UDim2.new(0.075, 0, 0.45, 0)
     minusBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
     minusBtn.Text = "−"
     minusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -260,7 +266,7 @@ local function createGUI()
 
     local plusBtn = Instance.new("TextButton")
     plusBtn.Size = UDim2.new(0.2, 0, 0, 24)
-    plusBtn.Position = UDim2.new(0.5, 0, 0.42, 0)
+    plusBtn.Position = UDim2.new(0.5, 0, 0.45, 0)
     plusBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
     plusBtn.Text = "+"
     plusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -272,13 +278,12 @@ local function createGUI()
     pCorner.Parent = plusBtn
     plusBtn.Parent = contentPanel
 
-    -- Current scale display (big)
     local currentScaleText = Instance.new("TextLabel")
     currentScaleText.Size = UDim2.new(0.85, 0, 0, 30)
-    currentScaleText.Position = UDim2.new(0.075, 0, 0.58, 0)
+    currentScaleText.Position = UDim2.new(0.075, 0, 0.62, 0)
     currentScaleText.BackgroundTransparency = 1
     currentScaleText.Text = "5x"
-    currentScaleText.TextColor3 = Color3.fromRGB(0, 255, 200)
+    currentScaleText.TextColor3 = Color3.fromRGB(200, 100, 255)
     currentScaleText.TextScaled = true
     currentScaleText.Font = Enum.Font.Bangers
     currentScaleText.Parent = contentPanel
@@ -290,10 +295,9 @@ local function createGUI()
         isMinimized = not isMinimized
         minBtn.Text = isMinimized and "+" or "−"
         contentPanel.Visible = not isMinimized
-        mainFrame.Size = isMinimized and UDim2.new(0, 140, 0, 26) or UDim2.new(0, 140, 0, 180)
+        mainFrame.Size = isMinimized and UDim2.new(0, 140, 0, 26) or UDim2.new(0, 140, 0, 170)
     end)
 
-    -- Toggle
     toggleBtn.MouseButton1Click:Connect(function()
         IsActive = not IsActive
         toggleBtn.Text = IsActive and "✅ ON" or "⛔ OFF"
@@ -306,7 +310,6 @@ local function createGUI()
         end
     end)
 
-    -- Scale adjust
     local function updateScale(newScale)
         newScale = math.clamp(newScale, 1, 10)
         SelectedScale = newScale
@@ -318,23 +321,13 @@ local function createGUI()
         end
     end
 
-    minusBtn.MouseButton1Click:Connect(function()
-        updateScale(SelectedScale - 1)
-    end)
-
-    plusBtn.MouseButton1Click:Connect(function()
-        updateScale(SelectedScale + 1)
-    end)
+    minusBtn.MouseButton1Click:Connect(function() updateScale(SelectedScale - 1) end)
+    plusBtn.MouseButton1Click:Connect(function() updateScale(SelectedScale + 1) end)
 
     scaleDisplay.MouseButton1Click:Connect(function()
-        -- Quick set: type a number (simple dialog)
-        local input = game:GetService("GuiService"):AddSelectionPrompt()
-        -- Fallback: just cycle
         local nums = {1,2,3,4,5,6,7,8,9,10}
         local idx = 1
-        for i,v in ipairs(nums) do
-            if v == SelectedScale then idx = i end
-        end
+        for i,v in ipairs(nums) do if v == SelectedScale then idx = i end end
         idx = idx % 10 + 1
         updateScale(nums[idx])
     end)
@@ -368,25 +361,18 @@ local function createGUI()
     return screenGui
 end
 
--- Cleanup on script end (if you stop it)
+-- Cleanup
 local function cleanup()
     resetAll()
-    for player, conn in pairs(Connections) do
-        conn:Disconnect()
-    end
-    Connections = {}
 end
 
--- Inject GUI
+-- Inject
 local gui = createGUI()
 gui.Parent = Player.PlayerGui
 
-print("🔥 OPPONENT HITBOX INFLATOR LOADED – Scale 1-10, target others only!")
-print("💀 Your hitbox stays normal. Everyone else becomes a giant target.")
+print("👻 GHOST HITBOX LOADED – Invisible, massive, undetectable!")
+print("🎯 Other players move normally, but their hitbox is 1-10x bigger.")
 
--- Optional: cleanup when GUI is destroyed
 gui.AncestryChanged:Connect(function()
-    if not gui.Parent then
-        cleanup()
-    end
+    if not gui.Parent then cleanup() end
 end)
